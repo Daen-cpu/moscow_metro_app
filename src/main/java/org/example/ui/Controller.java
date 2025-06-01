@@ -1,59 +1,77 @@
-package org.example;
-package ui;
+package org.example.ui;
 
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextArea;
-import model.Station;
-import service.MetroService;
+import org.example.db.StationDAO;
+import org.example.model.Station;
 
 import java.util.List;
 import java.util.Map;
 
 public class Controller {
 
-    @FXML private ComboBox<String> startComboBox;
-    @FXML private ComboBox<String> endComboBox;
-    @FXML private Canvas mapCanvas;
-    @FXML private TextArea routeTextArea;
+    @FXML
+    private Canvas canvas;
 
-    private MetroMapCanvas mapDrawer;
-    private MetroService metroService;
+    @FXML
+    private ComboBox<String> startCombo;
+
+    @FXML
+    private ComboBox<String> endCombo;
+
+    @FXML
+    private TextArea routeArea;
+
+    private MetroMapCanvas mapCanvas;
+    private StationDAO dao;
+    private Map<String, List<Station>> lines;
+    private List<int[]> connections;
+    private Map<Integer, Station> stationMap;
 
     @FXML
     public void initialize() {
-        metroService = new MetroService();
-        mapDrawer = new MetroMapCanvas(mapCanvas);
+        dao = new StationDAO();
+        lines = dao.getStationsGroupedByLine();
+        connections = dao.getConnections();
+        stationMap = dao.getStationMap();
 
-        List<Station> allStations = metroService.getAllStations();
+        Station.setStationMap(stationMap);
+
+        mapCanvas = new MetroMapCanvas(canvas);
+        mapCanvas.drawMetroMap(lines, connections);
+
+        // Заполнение ComboBox
+        List<Station> allStations = dao.getAllStations();
         for (Station s : allStations) {
-            startComboBox.getItems().add(s.getName());
-            endComboBox.getItems().add(s.getName());
+            startCombo.getItems().add(s.getName());
+            endCombo.getItems().add(s.getName());
         }
-
-        Map<String, List<Station>> lines = metroService.getStationsByLine();
-        List<int[]> connections = metroService.getConnections();
-        mapDrawer.drawMetroMap(lines, connections);
     }
 
     @FXML
-    public void onFindRoute() {
-        String start = startComboBox.getValue();
-        String end = endComboBox.getValue();
-        if (start == null || end == null || start.equals(end)) {
-            routeTextArea.setText("Выберите разные станции.");
-            return;
-        }
+    public void onFindRouteClicked() {
+        String from = startCombo.getValue();
+        String to = endCombo.getValue();
+        if (from == null || to == null) return;
 
-        List<Station> path = metroService.findShortestPath(start, end);
-        mapDrawer.drawMetroMap(metroService.getStationsByLine(), metroService.getConnections());
-        mapDrawer.highlightRoute(path);
+        Station start = dao.getByName(from);
+        Station end = dao.getByName(to);
+        if (start == null || end == null) return;
 
-        StringBuilder sb = new StringBuilder("Маршрут:\n");
-        for (Station s : path) {
-            sb.append(s.getName()).append(" (").append(s.getLine()).append(")\n");
+        List<Station> route = dao.bfsPath(start, end);
+
+        if (route.isEmpty()) {
+            routeArea.setText("Маршрут не найден.");
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (Station s : route) {
+                sb.append(s.getName()).append(" (").append(s.getLine()).append(")").append("\n");
+            }
+            routeArea.setText(sb.toString());
+            mapCanvas.drawMetroMap(lines, connections);
+            mapCanvas.highlightRoute(route);
         }
-        routeTextArea.setText(sb.toString());
     }
 }
